@@ -1,4 +1,4 @@
-name: Android Update 0.3.4 to 0.3.5 Diagnostic
+name: Android Update 0.3.5 to 0.3.6 Diagnostic
 
 on:
   push:
@@ -11,14 +11,14 @@ permissions:
   contents: write
 
 concurrency:
-  group: healthbridge-update-034-035
+  group: healthbridge-update-035-036
   cancel-in-progress: true
 
 env:
-  OLD_TAG: v0.3.4
-  OLD_APK: HealthBridge-v0.3.4.apk
-  NEW_TAG: v0.3.5
-  NEW_APK: HealthBridge-v0.3.5.apk
+  OLD_TAG: v0.3.5
+  OLD_APK: HealthBridge-v0.3.5.apk
+  NEW_TAG: v0.3.6
+  NEW_APK: HealthBridge-v0.3.6.apk
   PACKAGE_NAME: com.personal.healthbridge.reinstall
   AVD_NAME: healthbridge-update-diagnostic
 
@@ -79,23 +79,23 @@ jobs:
           test -s "apks/$NEW_APK"
           sha256sum "apks/$OLD_APK" "apks/$NEW_APK" | tee apk-sha256.txt
 
-      - name: Install 0.3.4 baseline
+      - name: Install 0.3.5 baseline
         shell: bash
         run: |
           set -euo pipefail
           adb install --user 0 "apks/$OLD_APK" 2>&1 | tee install-old.txt
           grep -q '^Success' install-old.txt
           adb shell dumpsys package "$PACKAGE_NAME" | grep -E 'versionCode=|versionName=' | head -n 4 | tee version-old.txt
-          grep -q 'versionName=0.3.4' version-old.txt
+          grep -q 'versionName=0.3.5' version-old.txt
 
-      - name: Update in place to 0.3.5
+      - name: Update in place to 0.3.6
         shell: bash
         run: |
           set -euo pipefail
           adb install --user 0 -r "apks/$NEW_APK" 2>&1 | tee install-update.txt
           grep -q '^Success' install-update.txt
           adb shell dumpsys package "$PACKAGE_NAME" | grep -E 'versionCode=|versionName=' | head -n 4 | tee version-new.txt
-          grep -q 'versionName=0.3.5' version-new.txt
+          grep -q 'versionName=0.3.6' version-new.txt
 
       - name: Record update result
         if: always()
@@ -103,12 +103,12 @@ jobs:
         run: |
           set -euo pipefail
           STATUS=failed
-          if grep -q '^Success' install-old.txt 2>/dev/null && grep -q '^Success' install-update.txt 2>/dev/null && grep -q 'versionName=0.3.5' version-new.txt 2>/dev/null; then STATUS=update_success; fi
+          if grep -q '^Success' install-old.txt 2>/dev/null && grep -q '^Success' install-update.txt 2>/dev/null && grep -q 'versionName=0.3.6' version-new.txt 2>/dev/null; then STATUS=update_success; fi
           cat > .github/update-smoke-result.json <<EOF
           {
             "run_id": "$GITHUB_RUN_ID",
-            "from_version": "0.3.4",
-            "to_version": "0.3.5",
+            "from_version": "0.3.5",
+            "to_version": "0.3.6",
             "package": "$PACKAGE_NAME",
             "status": "$STATUS",
             "old_install_output": $(jq -Rs . < install-old.txt 2>/dev/null || printf 'null'),
@@ -119,7 +119,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add .github/update-smoke-result.json
-          git commit -m 'Record Health Bridge 0.3.4 to 0.3.5 update diagnostic' || exit 0
+          git commit -m 'Record Health Bridge 0.3.5 to 0.3.6 update diagnostic' || exit 0
           for attempt in 1 2 3 4 5; do
             git fetch origin main
             git rebase origin/main
@@ -132,7 +132,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: healthbridge-update-034-to-035
+          name: healthbridge-update-035-to-036
           path: |
             install-old.txt
             install-update.txt
