@@ -223,7 +223,7 @@ jobs:
             "unit_tests": "success",
             "signed_apk": "verified",
             "release_readback": "verified",
-            "update_from_public_0_3_4_supported": true,
+            "update_from_public_0_3_5_supported": true,
             "future_public_updates_supported": true,
             "external_private_repo_dependency": false,
             "repository_secret_name": "HEALTHBRIDGE_PUBLIC_SIGNING_BUNDLE_BASE64",
