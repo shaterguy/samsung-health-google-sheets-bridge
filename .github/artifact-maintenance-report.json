@@ -1,9 +1,9 @@
 {
   "repository": "shaterguy/samsung-health-google-sheets-bridge",
-  "run_id": "33683383955",
+  "run_id": "33806231901",
   "event": "schedule",
   "deleted_artifacts": 0,
-  "remaining_artifacts": 0,
+  "remaining_artifacts": 6,
   "retention_days": 7,
-  "completed_at_utc": "2026-09-02T21:08:01Z"
+  "completed_at_utc": "2026-09-03T21:07:51Z"
 }
