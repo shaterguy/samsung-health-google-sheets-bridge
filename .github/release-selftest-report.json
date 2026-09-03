@@ -1,10 +1,10 @@
 {
-  "repository": "shaterguy/public-samsung-health-google-sheets-bridge",
-  "run_id": "31171984042",
-  "source_sha": "7b0c292147e2c303cddba3737c179e7ffab471dd",
-  "version": "0.3.5",
-  "version_tag": "v0.3.5",
-  "release_container_tag": "v0.3.5",
+  "repository": "shaterguy/samsung-health-google-sheets-bridge",
+  "run_id": "33702310871",
+  "source_sha": "df718f74c697f544c893f5bd7402bbdd8845ac1a",
+  "version": "0.3.6",
+  "version_tag": "v0.3.6",
+  "release_container_tag": "v0.3.6",
   "mode": "persistent-public-signing",
   "public_package": "com.personal.healthbridge.reinstall",
   "public_certificate_sha256": "98ec08ec0640003688d3c99a608cba45c75c0caea33e63d286fc640e4f454292",
@@ -13,12 +13,12 @@
   "unit_tests": "success",
   "signed_apk": "verified",
   "release_readback": "verified",
-  "update_from_public_0_3_4_supported": true,
+  "update_from_public_0_3_5_supported": true,
   "future_public_updates_supported": true,
   "external_private_repo_dependency": false,
   "repository_secret_name": "HEALTHBRIDGE_PUBLIC_SIGNING_BUNDLE_BASE64",
   "google_authorization_mode": "account-picker-googleauthutil-direct-token",
   "google_android_client_id_embedded": false,
   "google_authorization_runtime_e2e": "requires_device_account_confirmation",
-  "completed_at_utc": "2026-08-07T10:56:42Z"
+  "completed_at_utc": "2026-09-03T01:10:33Z"
 }
