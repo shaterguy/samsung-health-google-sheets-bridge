@@ -17,14 +17,14 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  RELEASE_TAG: v0.3.5
-  FALLBACK_RELEASE_TAG: v0.3.4
-  APK_NAME: HealthBridge-v0.3.5.apk
-  CHECKSUM_NAME: HealthBridge-v0.3.5.sha256
-  SOURCE_NAME: health-bridge-v0.3.5-source.zip
+  RELEASE_TAG: v0.3.6
+  FALLBACK_RELEASE_TAG: v0.3.5
+  APK_NAME: HealthBridge-v0.3.6.apk
+  CHECKSUM_NAME: HealthBridge-v0.3.6.sha256
+  SOURCE_NAME: health-bridge-v0.3.6-source.zip
   PACKAGE_NAME: com.personal.healthbridge.reinstall
-  VERSION_CODE: "11"
-  VERSION_NAME: "0.3.5"
+  VERSION_CODE: "12"
+  VERSION_NAME: "0.3.6"
   EXPECTED_PUBLIC_CERT_SHA256: "98ec08ec0640003688d3c99a608cba45c75c0caea33e63d286fc640e4f454292"
   EXPECTED_PUBLIC_CERT_SHA1: "e31ae124f93d06f1784fac1f1eb6241b08bf7af2"
 
@@ -116,10 +116,10 @@ jobs:
       - name: Preserve verified APK before publishing
         uses: actions/upload-artifact@v4
         with:
-          name: HealthBridge-v0.3.5-verified-apk
+          name: HealthBridge-v0.3.6-verified-apk
           path: |
-            dist/HealthBridge-v0.3.5.apk
-            dist/HealthBridge-v0.3.5.sha256
+            dist/HealthBridge-v0.3.6.apk
+            dist/HealthBridge-v0.3.6.sha256
             dist/signing-certificate.txt
             dist/zipalign-verification.txt
           if-no-files-found: error
@@ -149,8 +149,8 @@ jobs:
               if gh release create "$RELEASE_TAG" \
                 --verify-tag \
                 --repo "$GITHUB_REPOSITORY" \
-                --title "Health Bridge 0.3.5" \
-                --notes "In-place update from public 0.3.4. Keeps the same application ID and persistent public signing identity. Google Sheets connection now confirms a real account access-token grant before enabling synchronization. APK native libraries remain 16KB zip-aligned."; then
+                --title "Health Bridge 0.3.6" \
+                --notes "In-place update from public 0.3.5. Adds the Health Bridge launcher icon. Keeps the same application ID and persistent public signing identity. APK native libraries remain 16KB zip-aligned."; then
                 CREATED=1
                 break
               fi
@@ -236,7 +236,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add .github/release-selftest-report.json
-          git commit -m 'Record public Health Bridge 0.3.5 verification'
+          git commit -m 'Record public Health Bridge 0.3.6 verification'
           for attempt in 1 2 3 4 5; do
             git fetch origin main
             git rebase origin/main
