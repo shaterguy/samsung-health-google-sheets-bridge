@@ -127,12 +127,13 @@ class HealthSyncRepository(private val context: Context) {
         }
 
         val completed = Instant.now()
+        val completedKst = SheetRowMapper.formatSyncTimestamp(completed)
         val status = if (uploaded == 0) "success_no_changes" else "success"
         withContext(Dispatchers.IO) {
             sheets.appendSyncLog(
                 accessToken,
                 listOf(
-                    completed.toString(),
+                    completedKst,
                     "android://health-connect",
                     processed,
                     existingKeys.size,
@@ -150,7 +151,7 @@ class HealthSyncRepository(private val context: Context) {
             ""
         }
         settings.lastSyncMessage =
-            "${uploaded}개 원본 행을 Google Sheets에 동기화했습니다: $completed$historyNote"
+            "${uploaded}개 원본 행을 Google Sheets에 동기화했습니다: ${completedKst} KST$historyNote"
         return SyncReport(uploaded, started.toString(), completed.toString(), full)
     }
 

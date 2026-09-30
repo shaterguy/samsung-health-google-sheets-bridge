@@ -31,7 +31,7 @@ class SheetRowMapperTest {
     }
 
     @Test
-    fun sheetRowsKeepFourteenColumnsAndStableRowKey() {
+    fun sheetRowsKeepSourceInstantsCanonicalAndSyncTimesInKoreaTime() {
         val rows = SheetRowMapper.rows(
             record(),
             Instant.parse("2026-07-12T00:00:00Z"),
@@ -40,7 +40,15 @@ class SheetRowMapperTest {
         assertEquals(1, rows.size)
         assertEquals(14, rows.single().size)
         assertTrue(rows.single().first().toString().endsWith(":1"))
+        assertEquals("2026-07-11 00:00:00.000000", rows.single()[7])
+        assertEquals("2026-07-11 01:00:00.000000", rows.single()[8])
         assertEquals("2026-07-11 01:02:03.123456", rows.single()[9])
+        assertEquals("2026-07-12 09:00:00.000000", rows.single()[10])
+        assertEquals("2026-07-12 09:01:00.000000", rows.single()[13])
+        assertEquals(
+            "2026-07-12 09:00:00.123456",
+            SheetRowMapper.formatSyncTimestamp(Instant.parse("2026-07-12T00:00:00.123456Z")),
+        )
     }
 
     @Test
