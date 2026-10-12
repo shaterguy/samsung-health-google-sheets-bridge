@@ -2,7 +2,7 @@ name: Export Verified Install APK
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'ci-fallback/**']
     paths:
       - ".github/workflows/export-install-apk.yml"
   workflow_dispatch:
@@ -16,6 +16,8 @@ env:
 
 jobs:
   export:
+    if: >-
+      (github.event_name != 'push' || contains(github.event.head_commit.message, '[gh-fallback:export-install-apk.yml]'))
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

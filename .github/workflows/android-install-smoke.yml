@@ -2,7 +2,7 @@ name: Android Install Smoke
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'ci-fallback/**']
     paths:
       - ".github/workflows/android-install-smoke.yml"
   workflow_dispatch:
@@ -12,6 +12,8 @@ permissions:
 
 jobs:
   install:
+    if: >-
+      (github.event_name != 'push' || contains(github.event.head_commit.message, '[gh-fallback:android-install-smoke.yml]'))
     name: Clean install on Android ${{ matrix.api }}
     runs-on: ubuntu-latest
     timeout-minutes: 35
