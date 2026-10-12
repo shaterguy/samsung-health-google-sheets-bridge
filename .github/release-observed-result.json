@@ -1,7 +1,7 @@
 {
   "repository": "shaterguy/samsung-health-google-sheets-bridge",
-  "observed_run_id": "38253628813",
-  "source_sha": "9b6e774160ac9364444f8c0cfe968a149c5a22ff",
+  "observed_run_id": "38254786783",
+  "source_sha": "a4976059c0f414d153f6df0c2c21165b8dfeff48",
   "workflow_conclusion": "skipped",
   "mode": "persistent-public-signing",
   "public_certificate_sha256": "98ec08ec0640003688d3c99a608cba45c75c0caea33e63d286fc640e4f454292",
@@ -10,5 +10,5 @@
   "future_public_updates_supported_after_successful_baseline": true,
   "external_private_repo_dependency": false,
   "repository_secret_name": "HEALTHBRIDGE_PUBLIC_SIGNING_BUNDLE_BASE64",
-  "completed_at_utc": "2026-10-12T13:08:52Z"
+  "completed_at_utc": "2026-10-12T13:18:56Z"
 }
