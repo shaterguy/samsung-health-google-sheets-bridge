@@ -2,7 +2,7 @@ name: Android 16 Install Diagnostic v3
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'ci-fallback/**']
     paths:
       - ".github/install-smoke-trigger-v3.txt"
   workflow_dispatch:
@@ -22,6 +22,8 @@ env:
 
 jobs:
   install-test:
+    if: >-
+      (github.event_name != 'push' || contains(github.event.head_commit.message, '[gh-fallback:install-smoke-v3.yml]'))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

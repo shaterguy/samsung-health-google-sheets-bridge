@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - 'ci-fallback/**'
     paths:
       - "android/**"
       - ".github/workflows/android-release.yml"
@@ -30,6 +31,8 @@ env:
 
 jobs:
   release:
+    if: >-
+      (github.event_name != 'push' || contains(github.event.head_commit.message, '[gh-fallback:android-release.yml]'))
     runs-on: ubuntu-latest
     timeout-minutes: 40
     env:

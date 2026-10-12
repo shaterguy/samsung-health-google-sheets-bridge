@@ -2,7 +2,7 @@ name: Android Public Self-Test
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'ci-fallback/**']
     paths:
       - ".github/workflows/android-public-selftest.yml"
   workflow_dispatch:
@@ -12,6 +12,8 @@ permissions:
 
 jobs:
   verify:
+    if: >-
+      (github.event_name != 'push' || contains(github.event.head_commit.message, '[gh-fallback:android-public-selftest.yml]'))
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:

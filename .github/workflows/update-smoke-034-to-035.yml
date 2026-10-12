@@ -2,7 +2,7 @@ name: Android Update 0.3.5 to 0.3.6 Diagnostic
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'ci-fallback/**']
     paths:
       - ".github/update-smoke-trigger.txt"
   workflow_dispatch:
@@ -24,6 +24,8 @@ env:
 
 jobs:
   update-test:
+    if: >-
+      (github.event_name != 'push' || contains(github.event.head_commit.message, '[gh-fallback:update-smoke-034-to-035.yml]'))
     runs-on: ubuntu-latest
     timeout-minutes: 18
     steps:
