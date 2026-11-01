@@ -1,0 +1,184 @@
+name: Sign verified Health Bridge APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact tested source commit on main
+        required: true
+        type: string
+      release_tag:
+        description: Existing draft release tag
+        required: true
+        default: v0.4.0
+        type: string
+      unsigned_asset:
+        description: Unsigned release APK asset in that draft
+        required: true
+        default: HealthBridge-v0.4.0-unsigned.apk
+        type: string
+      unsigned_sha256:
+        description: SHA-256 of the locally verified unsigned APK
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: health-bridge-public-signing
+  cancel-in-progress: false
+
+env:
+  PACKAGE_NAME: com.personal.healthbridge.reinstall
+  VERSION_NAME: '0.4.0'
+  VERSION_CODE: '13'
+  APK_NAME: HealthBridge-v0.4.0.apk
+  CHECKSUM_NAME: HealthBridge-v0.4.0.sha256
+  EXPECTED_CERT_SHA256: 98ec08ec0640003688d3c99a608cba45c75c0caea33e63d286fc640e4f454292
+
+jobs:
+  sign:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_SHA: ${{ inputs.source_sha }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      UNSIGNED_ASSET: ${{ inputs.unsigned_asset }}
+      UNSIGNED_SHA256: ${{ inputs.unsigned_sha256 }}
+    steps:
+      - name: Check exact dispatch identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$UNSIGNED_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          test "$SOURCE_SHA" = "$GITHUB_SHA"
+          test "$RELEASE_TAG" = "v$VERSION_NAME"
+          test "$UNSIGNED_ASSET" = "HealthBridge-v$VERSION_NAME-unsigned.apk"
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check draft release and tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          test "$(git rev-parse "$RELEASE_TAG^{commit}")" = "$SOURCE_SHA"
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft' | grep -qx true
+          mkdir -p incoming dist readback
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$UNSIGNED_ASSET" --dir incoming
+          printf '%s  %s\n' "$UNSIGNED_SHA256" "incoming/$UNSIGNED_ASSET" | sha256sum --check --strict
+          unzip -t "incoming/$UNSIGNED_ASSET" >/dev/null
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install signing tools only
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager 'build-tools;36.0.0'
+
+      - name: Validate APK identity before accessing key
+        shell: bash
+        run: |
+          set -euo pipefail
+          BT="$ANDROID_HOME/build-tools/36.0.0"
+          "$BT/aapt" dump badging "incoming/$UNSIGNED_ASSET" > dist/apk-badging.txt
+          grep -q "package: name='$PACKAGE_NAME'" dist/apk-badging.txt
+          grep -q "versionCode='$VERSION_CODE'" dist/apk-badging.txt
+          grep -q "versionName='$VERSION_NAME'" dist/apk-badging.txt
+          if "$BT/apksigner" verify "incoming/$UNSIGNED_ASSET" >/dev/null 2>&1; then
+            echo 'Expected an unsigned release APK' >&2
+            exit 1
+          fi
+
+      - name: Restore persistent signing identity
+        shell: bash
+        env:
+          SIGNING_BUNDLE_BASE64: ${{ secrets.HEALTHBRIDGE_PUBLIC_SIGNING_BUNDLE_BASE64 }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$SIGNING_BUNDLE_BASE64"
+          KEY_DIR="$RUNNER_TEMP/healthbridge-signing"
+          mkdir -p "$KEY_DIR"
+          printf '%s' "$SIGNING_BUNDLE_BASE64" | base64 --decode > "$KEY_DIR/bundle.tar.gz"
+          tar -xzf "$KEY_DIR/bundle.tar.gz" -C "$KEY_DIR"
+          test -s "$KEY_DIR/key.pk8"
+          test -s "$KEY_DIR/cert.pem"
+          CERT_SHA="$(openssl x509 -in "$KEY_DIR/cert.pem" -noout -fingerprint -sha256 | cut -d= -f2 | tr -d ':' | tr 'A-F' 'a-f')"
+          test "$CERT_SHA" = "$EXPECTED_CERT_SHA256"
+
+      - name: Align sign and verify the existing APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          BT="$ANDROID_HOME/build-tools/36.0.0"
+          KEY_DIR="$RUNNER_TEMP/healthbridge-signing"
+          "$BT/zipalign" -P 16 -f 4 "incoming/$UNSIGNED_ASSET" "$RUNNER_TEMP/healthbridge-aligned.apk"
+          "$BT/apksigner" sign --key "$KEY_DIR/key.pk8" --cert "$KEY_DIR/cert.pem" --out "dist/$APK_NAME" "$RUNNER_TEMP/healthbridge-aligned.apk"
+          "$BT/apksigner" verify --verbose --print-certs "dist/$APK_NAME" > dist/signing-certificate.txt
+          CERT_SHA="$(sed -n 's/Signer #1 certificate SHA-256 digest: //p' dist/signing-certificate.txt | tr -d ':' | tr 'A-F' 'a-f')"
+          test "$CERT_SHA" = "$EXPECTED_CERT_SHA256"
+          "$BT/zipalign" -c -P 16 -v 4 "dist/$APK_NAME" > dist/zipalign-verification.txt
+          "$BT/aapt" dump badging "dist/$APK_NAME" > dist/apk-badging.txt
+          grep -q "package: name='$PACKAGE_NAME'" dist/apk-badging.txt
+          grep -q "versionCode='$VERSION_CODE'" dist/apk-badging.txt
+          grep -q "versionName='$VERSION_NAME'" dist/apk-badging.txt
+          unzip -t "dist/$APK_NAME" >/dev/null
+          (cd dist && sha256sum "$APK_NAME" > "$CHECKSUM_NAME")
+          SIGNED_SHA256="$(sha256sum "dist/$APK_NAME" | cut -d' ' -f1)"
+          export SIGNED_SHA256
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          Path('dist/release-verification.json').write_text(json.dumps({
+              'source_sha': os.environ['SOURCE_SHA'],
+              'unsigned_sha256': os.environ['UNSIGNED_SHA256'],
+              'signed_sha256': os.environ['SIGNED_SHA256'],
+              'package': os.environ['PACKAGE_NAME'],
+              'version_name': os.environ['VERSION_NAME'],
+              'version_code': int(os.environ['VERSION_CODE']),
+              'certificate_sha256': os.environ['EXPECTED_CERT_SHA256'],
+              'workflow_run_id': os.environ['GITHUB_RUN_ID'],
+              'workflow_run_attempt': os.environ['GITHUB_RUN_ATTEMPT'],
+              'build_reused': True,
+              'signature_verified': True,
+              'zip_alignment': '16KB',
+          }, indent=2) + '\n')
+          PY
+
+      - name: Upload verified files and read back before publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft' | grep -qx true
+          gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            "dist/$APK_NAME" "dist/$CHECKSUM_NAME" dist/signing-certificate.txt \
+            dist/zipalign-verification.txt dist/release-verification.json --clobber
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$APK_NAME" --pattern "$CHECKSUM_NAME" --dir readback
+          (cd readback && sha256sum --check --strict "$CHECKSUM_NAME")
+          cmp "dist/$APK_NAME" "readback/$APK_NAME"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify "readback/$APK_NAME"
+          test "$(git rev-parse "$RELEASE_TAG^{commit}")" = "$SOURCE_SHA"
+          gh release delete-asset "$RELEASE_TAG" "$UNSIGNED_ASSET" --repo "$GITHUB_REPOSITORY" --yes
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft' | grep -qx false
+
+      - name: Clean signing material
+        if: always()
+        shell: bash
+        run: |
+          rm -rf "$RUNNER_TEMP/healthbridge-signing"
+          rm -f "$RUNNER_TEMP/healthbridge-aligned.apk"

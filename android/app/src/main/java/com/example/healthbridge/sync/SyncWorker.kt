@@ -1,89 +1,80 @@
 package com.example.healthbridge.sync
 
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.BatteryManager
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
-import com.example.healthbridge.data.SecureSettings
-import com.example.healthbridge.health.HealthSyncRepository
-import com.example.healthbridge.sheets.GoogleAuthorizationRequiredException
 import java.util.concurrent.TimeUnit
+import com.example.healthbridge.data.SecureSettings
 
 class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
-        val repository = HealthSyncRepository(applicationContext)
-        val settings = repository.settings
-        if (!settings.syncEnabled || !settings.configured()) return Result.success()
-
-        if (!isWifiConnected(applicationContext)) {
-            settings.lastSyncMessage = "Wi-Fi에 연결되지 않아 자동 동기화를 건너뛰었습니다."
-            return Result.success()
-        }
-
-        val battery = currentBatteryPercent(applicationContext)
-        if (battery != null && battery < settings.minimumBatteryPercent) {
-            settings.lastSyncMessage =
-                "배터리 $battery%: 설정한 최소 ${settings.minimumBatteryPercent}%보다 낮아 동기화를 건너뛰었습니다."
-            return Result.success()
-        }
-
-        return try {
-            repository.sync()
-            Result.success()
-        } catch (error: GoogleAuthorizationRequiredException) {
-            settings.googleAuthorized = false
-            settings.lastSyncMessage = error.message
-            Result.failure()
-        } catch (error: SecurityException) {
-            settings.lastSyncMessage = "Health Connect 권한이 필요합니다: ${error.message}"
-            Result.failure()
-        } catch (error: Exception) {
-            settings.lastSyncMessage = "동기화 실패: ${error.message}"
-            Result.retry()
-        }
+        AutomaticSync.run(applicationContext, foreground = false)
+        return Result.success()
     }
 
     companion object {
-        private const val uniqueName = "health-connect-periodic-sync"
+        private const val uniqueName = "health-connect-periodic-sync-v2"
+        private const val immediateName = "health-connect-alarm-sync-v2"
+        private fun constraints() = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
 
-        fun schedule(context: Context) {
-            val settings = SecureSettings(context)
-            val hours = SyncPolicy.normalizeInterval(settings.syncIntervalHours)
-            val constraints = Constraints.Builder()
-                .setRequiredNetworkType(NetworkType.UNMETERED)
-                .setRequiresBatteryNotLow(true)
+        fun schedule(context: Context, reset: Boolean = false) {
+            if (!SecureSettings(context).syncEnabled) return cancel(context)
+            val work = WorkManager.getInstance(context)
+            // Replace the old Wi-Fi-only work once, then retain the new fallback's cadence.
+            work.cancelUniqueWork("health-connect-periodic-sync")
+            val request = PeriodicWorkRequestBuilder<SyncWorker>(15L, TimeUnit.MINUTES)
+                .setConstraints(constraints())
                 .build()
-            val request = PeriodicWorkRequestBuilder<SyncWorker>(hours.toLong(), TimeUnit.HOURS)
-                .setConstraints(constraints)
-                .build()
-            WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-                uniqueName,
-                ExistingPeriodicWorkPolicy.UPDATE,
-                request,
-            )
+            work.enqueueUniquePeriodicWork(uniqueName, ExistingPeriodicWorkPolicy.KEEP, request)
+            SyncScheduler.restore(context, reset)
         }
 
-        fun cancel(context: Context) =
-            WorkManager.getInstance(context).cancelUniqueWork(uniqueName)
+        fun enqueue(context: Context) {
+            val request = OneTimeWorkRequestBuilder<SyncWorker>()
+                .setConstraints(constraints())
+                .build()
+            WorkManager.getInstance(context).enqueueUniqueWork(immediateName, ExistingWorkPolicy.KEEP, request)
+        }
 
-        fun isWifiConnected(context: Context): Boolean {
+        fun cancel(context: Context) {
+            val work = WorkManager.getInstance(context)
+            work.cancelUniqueWork("health-connect-periodic-sync")
+            work.cancelUniqueWork(uniqueName)
+            work.cancelUniqueWork(immediateName)
+            SyncScheduler.cancel(context)
+            context.stopService(Intent(context, ScheduledSyncService::class.java))
+        }
+
+        fun isNetworkConnected(context: Context): Boolean {
             val connectivity = context.getSystemService(ConnectivityManager::class.java)
             val network = connectivity.activeNetwork ?: return false
             val capabilities = connectivity.getNetworkCapabilities(network) ?: return false
-            return capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+            return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
         }
 
         fun currentBatteryPercent(context: Context): Int? {
-            val battery = context.getSystemService(BatteryManager::class.java)
-            val value = battery.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
-            return value.takeIf { it in 0..100 }
+            val value = context.getSystemService(BatteryManager::class.java)
+                .getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+            if (value in 0..100) return value
+            val battery = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED)) ?: return null
+            val level = battery.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+            val scale = battery.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
+            return if (level >= 0 && scale > 0) level * 100 / scale else null
         }
     }
 }

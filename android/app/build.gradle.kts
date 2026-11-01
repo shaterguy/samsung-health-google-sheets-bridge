@@ -12,8 +12,8 @@ android {
         applicationId = providers.gradleProperty("applicationId").getOrElse("com.personal.healthbridge.reinstall")
         minSdk = 28
         targetSdk = 35
-        versionCode = 12
-        versionName = "0.3.6"
+        versionCode = 13
+        versionName = "0.4.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
