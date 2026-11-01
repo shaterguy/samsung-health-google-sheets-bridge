@@ -55,7 +55,6 @@ jobs:
           set -euo pipefail
           [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$UNSIGNED_SHA256" =~ ^[0-9a-f]{64}$ ]]
-          test "$SOURCE_SHA" = "$GITHUB_SHA"
           test "$RELEASE_TAG" = "v$VERSION_NAME"
           test "$UNSIGNED_ASSET" = "HealthBridge-v$VERSION_NAME-unsigned.apk"
 
@@ -63,12 +62,14 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+          ref: ${{ inputs.source_sha }}
 
       - name: Check draft release and tag
         shell: bash
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          git merge-base --is-ancestor "$SOURCE_SHA" origin/main
           test "$(git rev-parse "$RELEASE_TAG^{commit}")" = "$SOURCE_SHA"
           gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft' | grep -qx true
           mkdir -p incoming dist readback
@@ -81,13 +82,14 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - uses: android-actions/setup-android@v3
-
       - name: Install signing tools only
         shell: bash
         run: |
           set -euo pipefail
-          sdkmanager 'build-tools;36.0.0'
+          SDK_MANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDK_MANAGER"
+          yes | "$SDK_MANAGER" --licenses >/dev/null || true
+          "$SDK_MANAGER" 'build-tools;36.0.0'
 
       - name: Validate APK identity before accessing key
         shell: bash
@@ -145,6 +147,7 @@ jobs:
           from pathlib import Path
           Path('dist/release-verification.json').write_text(json.dumps({
               'source_sha': os.environ['SOURCE_SHA'],
+              'signing_workflow_sha': os.environ['GITHUB_SHA'],
               'unsigned_sha256': os.environ['UNSIGNED_SHA256'],
               'signed_sha256': os.environ['SIGNED_SHA256'],
               'package': os.environ['PACKAGE_NAME'],
