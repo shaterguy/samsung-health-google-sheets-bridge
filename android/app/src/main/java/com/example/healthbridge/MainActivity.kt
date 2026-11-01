@@ -213,6 +213,8 @@ private fun HealthBridgeScreen(
 ) {
     val snackbar = remember { SnackbarHostState() }
     var page by rememberSaveable { mutableIntStateOf(0) }
+    val scrollState = rememberScrollState()
+    LaunchedEffect(page) { scrollState.scrollTo(0) }
     var spreadsheetId by rememberSaveable(state.spreadsheetId) { mutableStateOf(state.spreadsheetId) }
     var interval by rememberSaveable(state.syncIntervalHours) { mutableIntStateOf(state.syncIntervalHours) }
     var battery by rememberSaveable(state.minimumBatteryPercent) { mutableIntStateOf(state.minimumBatteryPercent) }
@@ -259,7 +261,7 @@ private fun HealthBridgeScreen(
         ) { insets ->
             Box(Modifier.fillMaxSize().padding(insets), contentAlignment = Alignment.TopCenter) {
                 Column(
-                    Modifier.widthIn(max = 840.dp).fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
+                    Modifier.widthIn(max = 840.dp).fillMaxSize().verticalScroll(scrollState).padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(24.dp),
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
