@@ -30,6 +30,8 @@ import com.example.healthbridge.data.UploadRecord
 import com.example.healthbridge.sheets.GoogleAuthorization
 import com.example.healthbridge.sheets.GoogleSheetsClient
 import com.example.healthbridge.sheets.SheetRowMapper
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.Duration
@@ -52,7 +54,13 @@ class HealthSyncRepository(private val context: Context) {
 
     fun requestedPermissions(): Set<String> = HealthPermissions.available(client)
 
-    suspend fun sync(forceFull: Boolean = false): SyncReport {
+    // All entry points share one lock: reading existing keys and appending rows must be atomic
+    // within this process, including a manual sync overlapping a scheduled sync.
+    suspend fun sync(forceFull: Boolean = false): SyncReport = syncMutex.withLock {
+        syncLocked(forceFull)
+    }
+
+    private suspend fun syncLocked(forceFull: Boolean): SyncReport {
         require(providerStatus == HealthConnectClient.SDK_AVAILABLE) {
             "Health Connect를 사용할 수 없거나 업데이트가 필요합니다."
         }
@@ -64,6 +72,8 @@ class HealthSyncRepository(private val context: Context) {
             "Health Connect 데이터 권한을 모두 허용해 주세요."
         }
 
+        val targetSpreadsheet = settings.spreadsheetId
+        val targetAccount = settings.googleAccountEmail
         val started = Instant.now()
         val full = forceFull || !settings.initialSyncComplete
         val overlapStart = settings.lastSyncInstant?.let(Instant::parse)?.minus(Duration.ofHours(48))
@@ -78,7 +88,7 @@ class HealthSyncRepository(private val context: Context) {
         }
 
         val accessToken = GoogleAuthorization.accessToken(context)
-        val sheets = GoogleSheetsClient(settings.spreadsheetId)
+        val sheets = GoogleSheetsClient(targetSpreadsheet)
         val existingKeys = withContext(Dispatchers.IO) {
             sheets.readExistingRowKeys(accessToken)
         }
@@ -142,7 +152,12 @@ class HealthSyncRepository(private val context: Context) {
             )
         }
 
+        // A newly selected destination must not inherit the old transfer's cursor or result.
+        if (settings.spreadsheetId != targetSpreadsheet || settings.googleAccountEmail != targetAccount) {
+            return SyncReport(uploaded, started.toString(), completed.toString(), full)
+        }
         settings.lastSyncInstant = started.toString()
+        settings.lastSuccessfulSyncInstant = completed.toString()
         settings.initialSyncComplete = true
         val historyNote = if (full && !historyGranted) {
             " (과거 이력 권한이 없어 최근 30일만 처리)"
@@ -355,4 +370,8 @@ class HealthSyncRepository(private val context: Context) {
             record, "nutrition", record.startTime, record.endTime, record.startTime.atZone(ZoneId.systemDefault()).toLocalDate(), payload,
         )
     }
+    companion object {
+        private val syncMutex = Mutex()
+    }
+
 }

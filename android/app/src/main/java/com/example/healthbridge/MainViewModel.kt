@@ -1,6 +1,9 @@
 package com.example.healthbridge
 
 import android.app.Application
+import androidx.health.connect.client.permission.HealthPermission
+import com.example.healthbridge.sync.SyncScheduler
+import kotlinx.coroutines.CancellationException
 import androidx.health.connect.client.HealthConnectClient
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -26,6 +29,12 @@ data class MainUiState(
     val minimumBatteryPercent: Int = SyncPolicy.defaultBatteryPercentage,
     val initialSyncComplete: Boolean = false,
     val lastSyncMessage: String? = null,
+    val lastSyncInstant: String? = null,
+    val nextSyncAtMillis: Long = 0L,
+    val exactAlarmAllowed: Boolean = false,
+    val batteryOptimizationExempt: Boolean = false,
+    val backgroundReadReady: Boolean = false,
+    val backgroundReadStatus: String = "확인 중",
     val busy: Boolean = false,
     val message: String? = null,
 ) {
@@ -44,11 +53,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun refresh() {
         viewModelScope.launch {
-            val granted = if (repository.providerStatus == HealthConnectClient.SDK_AVAILABLE) {
-                repository.grantedPermissions()
-            } else {
-                emptySet()
-            }
+            val available = repository.providerStatus == HealthConnectClient.SDK_AVAILABLE
+            val granted = if (available) runCatching { repository.grantedPermissions() }.getOrDefault(emptySet()) else emptySet()
+            val backgroundSupported = available && runCatching { HealthPermission.PERMISSION_READ_HEALTH_DATA_IN_BACKGROUND in repository.requestedPermissions() }.getOrDefault(false)
+            val backgroundGranted = HealthPermission.PERMISSION_READ_HEALTH_DATA_IN_BACKGROUND in granted
             _state.value = _state.value.copy(
                 providerStatus = repository.providerStatus,
                 granted = granted,
@@ -60,6 +68,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 minimumBatteryPercent = repository.settings.minimumBatteryPercent,
                 initialSyncComplete = repository.settings.initialSyncComplete,
                 lastSyncMessage = repository.settings.lastSyncMessage,
+                lastSyncInstant = repository.settings.lastSuccessfulSyncInstant ?: repository.settings.lastSyncInstant,
+                nextSyncAtMillis = repository.settings.nextSyncAtMillis,
+                exactAlarmAllowed = SyncScheduler.canScheduleExact(getApplication()),
+                batteryOptimizationExempt = SyncScheduler.isBatteryOptimizationExempt(getApplication()),
+                backgroundReadReady = backgroundSupported && backgroundGranted,
+                backgroundReadStatus = when {
+                    !available -> "Health Connect 연결 필요"
+                    !backgroundSupported -> "이 기기에서 지원하지 않음"
+                    backgroundGranted -> "허용됨"
+                    else -> "권한 필요"
+                },
             )
         }
     }
@@ -83,6 +102,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _state.value = _state.value.copy(
             spreadsheetId = normalized,
             initialSyncComplete = if (changed) false else _state.value.initialSyncComplete,
+            lastSyncInstant = if (changed) null else _state.value.lastSyncInstant,
+            lastSyncMessage = repository.settings.lastSyncMessage,
             message = "스프레드시트 ID를 암호화 저장했습니다.",
         )
     }
@@ -116,9 +137,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         repository.settings.syncIntervalHours = intervalHours
         repository.settings.minimumBatteryPercent = minimumBatteryPercent
         if (repository.settings.syncEnabled) {
-            SyncWorker.schedule(getApplication())
+            SyncWorker.schedule(getApplication(), reset = true)
         }
         _state.value = _state.value.copy(
+            nextSyncAtMillis = repository.settings.nextSyncAtMillis,
             syncIntervalHours = repository.settings.syncIntervalHours,
             minimumBatteryPercent = repository.settings.minimumBatteryPercent,
             message = "자동 동기화 조건을 저장했습니다.",
@@ -135,12 +157,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         repository.settings.syncEnabled = enabled
         if (enabled) {
-            SyncWorker.schedule(getApplication())
+            SyncWorker.schedule(getApplication(), reset = true)
         } else {
             SyncWorker.cancel(getApplication())
         }
         _state.value = _state.value.copy(
             syncEnabled = enabled,
+            nextSyncAtMillis = repository.settings.nextSyncAtMillis,
             message = if (enabled) {
                 "${repository.settings.syncIntervalHours}시간 간격 자동 동기화를 예약했습니다."
             } else {
@@ -175,11 +198,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     lastSyncMessage = repository.settings.lastSyncMessage,
                     message = "${report.uploaded}개 원본 행을 동기화했습니다.",
                 )
+                refresh()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (error: Exception) {
+                repository.settings.lastSyncMessage = "동기화 실패: ${error.message}"
                 _state.value = _state.value.copy(
                     busy = false,
+                    lastSyncMessage = repository.settings.lastSyncMessage,
                     message = "동기화 실패: ${error.message}",
                 )
+            } finally {
+                _state.value = _state.value.copy(busy = false)
             }
         }
     }

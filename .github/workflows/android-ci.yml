@@ -1,17 +1,8 @@
 name: Android CI
 
 on:
-  pull_request:
-    paths:
-      - "android/**"
-      - "README.md"
-      - "BUILD-VERIFICATION.md"
-      - "PUBLIC_OAUTH_SETUP.md"
-      - "SIGNING_POLICY.md"
-      - ".github/workflows/android-*.yml"
   push:
     branches:
-      - main
       - 'ci-fallback/**'
     paths:
       - "android/**"
@@ -57,7 +48,7 @@ jobs:
       - name: Upload debug APK evidence
         uses: actions/upload-artifact@v4
         with:
-          name: health-bridge-v0.3.3-debug-${{ github.sha }}
+          name: health-bridge-debug-${{ github.sha }}-${{ github.run_attempt }}
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 7

@@ -62,11 +62,21 @@ class SecureSettings(context: Context) {
         get() = prefs.getString("last_sync_message", null)
         set(value) = prefs.edit().putString("last_sync_message", value).apply()
 
+    var nextSyncAtMillis: Long
+        get() = prefs.getLong("next_sync_at_millis", 0L)
+        set(value) { prefs.edit().putLong("next_sync_at_millis", value).commit() }
+
+    var lastSuccessfulSyncInstant: String?
+        get() = prefs.getString("last_successful_sync_instant", null)
+        set(value) = prefs.edit().putString("last_successful_sync_instant", value).apply()
+
     fun configured(): Boolean =
         googleAuthorized && spreadsheetId.matches(Regex("[A-Za-z0-9_-]{20,}"))
 
     fun clearSyncCursor() {
         initialSyncComplete = false
         lastSyncInstant = null
+        lastSuccessfulSyncInstant = null
+        lastSyncMessage = "새 스프레드시트의 첫 동기화 대기"
     }
 }
